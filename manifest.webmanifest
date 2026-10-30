@@ -1,0 +1,17 @@
+{
+  "id": "/amekaji-studio/",
+  "name": "AMEKAJI STUDIO",
+  "short_name": "AMEKAJI",
+  "description": "30秒のアメカジ動画の台本・字幕・ナレーション・画像プロンプトをつくる制作ノート",
+  "lang": "ja",
+  "start_url": "/amekaji-studio/",
+  "scope": "/amekaji-studio/",
+  "display": "standalone",
+  "background_color": "#f7f3e6",
+  "theme_color": "#203c32",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
