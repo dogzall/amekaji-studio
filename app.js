@@ -1,28 +1,117 @@
-const $=s=>document.querySelector(s);
-const profiles=[
-{re:/デニム|ジーンズ|ジーパン/,item:'デニム',detail:'生地の凹凸やステッチ',point:'色味とシルエット',pair:'白Tとブーツ',care:'穿いた時間が、少しずつ表情になる',visual:'indigo denim jeans, detailed stitching and textured cotton'},
-{re:/ブーツ|革靴|レザー/,item:'レザーアイテム',detail:'革のシボや縫い目',point:'革の質感と全体のボリューム',pair:'デニムとシンプルなトップス',care:'使い込むほど、自分らしい表情へ',visual:'brown leather boots and leather accessories, leather grain and stitching'},
-{re:/ネル|シャツ/,item:'シャツ',detail:'織りや柄の重なり',point:'柄の色をひとつ拾うこと',pair:'無地のTシャツとデニム',care:'羽織るだけで、着こなしに奥行きが出る',visual:'vintage plaid flannel shirt, woven fabric texture'},
-{re:/スウェット|パーカ|トレーナー/,item:'スウェット',detail:'リブや生地の厚み',point:'肩の落ち方と丈のバランス',pair:'濃色デニムと革靴',care:'気負わず着られる、毎日の相棒に',visual:'vintage heather grey sweatshirt, ribbed cuffs, cotton texture'},
-{re:/Tシャツ|白T|Ｔシャツ/,item:'Tシャツ',detail:'首元のリブや生地の表情',point:'身幅と着丈のバランス',pair:'ストレートデニムとスニーカー',care:'シンプルだからこそ、素材と形で差がつく',visual:'heavyweight white cotton t-shirt, ribbed collar, fabric texture'},
-{re:/ミリタリー|軍|カーゴ|MA-1|M65/i,item:'ミリタリーウェア',detail:'ポケットや機能的な縫製',point:'ボリュームと色のバランス',pair:'白Tとすっきりしたパンツ',care:'実用から生まれたディテールを、日常に',visual:'olive military field jacket and cargo trousers, functional pockets'},
-{re:/.*/,item:'アメカジアイテム',detail:'素材の質感やディテール',point:'色とシルエットのバランス',pair:'デニムと無地のトップス',care:'お気に入りを、自分らしい着こなしに',visual:'American casual outfit, denim, cotton, vintage workwear details'}];
-let active='script',state;
-const descriptions={script:'6カット × 5秒。原稿はタップして編集できます。',subtitle:'各カット5秒のSRT字幕。編集してそのまま保存できます。',narration:'30秒を目安にした読み上げ原稿。実際の尺に合わせて調整してください。',prompt:'各カット用の画像生成指示。画像生成サービスに貼り付けて使えます。'};
-function makeState(theme,tone,audience){const p=profiles.find(p=>p.re.test(theme));const intro=tone==='story'?`「${theme}」。好きになる理由は、細部にある。`:tone==='tips'?`「${theme}」。着こなしで意識したいポイントは？`:`「${theme}」。まずは、その魅力を見ていこう。`;
-const lines=[intro,`${p.item}は、${p.detail}に注目。`,`${p.care}。`,tone==='tips'?`合わせ方のコツは、${p.point}。`:`選ぶときは、${p.point}をチェック。`,`${p.pair}を合わせて、全身のバランスを楽しもう。`,'あなたなら、どう着る？ 保存して、次のコーデのヒントに。'];
-return {theme,tone,audience,scenes:lines.map((text,i)=>({text,shot:[`全体像を映し、テーマ「${theme}」を提示`,`${p.detail}を寄りで撮影`,'手で触れる・身につける動きをゆっくり撮影',`${p.point}が伝わる比較カット`,`${p.pair}との全身コーデ`,'お気に入りのディテールで締める'][i]})),subtitle:lines.map((t,i)=>`${i+1}\n00:00:${String(i*5).padStart(2,'0')},000 --> 00:00:${String((i+1)*5).padStart(2,'0')},000\n${t}`).join('\n\n'),narration:lines.join('\n\n'),prompt:lines.map((_,i)=>`【CUT ${String(i+1).padStart(2,'0')} / ${i*5}–${(i+1)*5}秒】\nテーマ：${theme}\n${['全身の雰囲気を伝える導入カット','素材のディテールのマクロ撮影','手元とアイテムの自然な動き','シルエットや合わせ方が伝わる構図','街角での全身コーディネート','余韻のあるディテールの静物写真'][i]}。${audience}に魅力が伝わる、${tone==='story'?'映画のワンシーンのような':tone==='tips'?'服の組み合わせが明確にわかる':'質感が見やすい'}写真。\nAmerican casual editorial photography, ${p.visual}, warm natural light, subtle film grain, muted indigo and earthy tones, vertical 9:16 composition, consistent outfit across scenes, no text, no watermark.`).join('\n\n')};}
-function toast(msg){$('#toast').textContent=msg;$('#toast').classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('show'),2600)}
-function save(){try{localStorage.setItem('amekaji-v1',JSON.stringify({state,theme:$('#theme').value,tone:$('#tone').value,audience:$('#audience').value}));return true}catch{toast('端末への自動保存ができません。ファイルで保存してください。');return false}}
-function currentText(){return active==='script'?state.scenes.map((s,i)=>`CUT ${i+1} / ${i*5}–${(i+1)*5}秒\n${s.text}\n映像：${s.shot}`).join('\n\n'):state[active]}
-function allText(){return `AMEKAJI STUDIO\nテーマ：${state.theme}\n伝え方：${{guide:'解説',story:'ストーリー',tips:'着こなしのコツ'}[state.tone]}\n対象：${state.audience}\n\n【台本】\n${state.scenes.map((s,i)=>`${i*5}–${(i+1)*5}秒：${s.text}\n映像：${s.shot}`).join('\n\n')}\n\n【字幕 / SRT】\n${state.subtitle}\n\n【ナレーション】\n${state.narration}\n\n【画像生成プロンプト】\n${state.prompt}`}
-function render(){ $('#concept').textContent=state.theme;$('#tone-label').textContent={guide:'解説',story:'ストーリー',tips:'着こなしのコツ'}[state.tone];$('#panel-description').textContent=descriptions[active];$('#download').textContent=active==='subtitle'?'SRTで保存 ↓':'TXTで保存 ↓';document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===active);b.setAttribute('aria-pressed',b.dataset.tab===active)});const panel=$('#panel');panel.replaceChildren();if(active==='script'){state.scenes.forEach((s,i)=>{const card=document.createElement('article');card.className='scene';const meta=document.createElement('div');meta.className='scene-meta';meta.innerHTML=`<strong>${String(i+1).padStart(2,'0')}</strong><span>${String(i*5).padStart(2,'0')}–${String((i+1)*5).padStart(2,'0')}s</span>`;const c=document.createElement('div');c.className='scene-content';const label=document.createElement('span');label.textContent=['HOOK / つかみ','DETAIL / 素材を見せる','STORY / 魅力を伝える','POINT / ポイント','STYLING / 着こなし','CLOSING / しめくくり'][i];const t=document.createElement('textarea');t.value=s.text;t.setAttribute('aria-label',`カット${i+1}の台本`);t.rows=2;t.addEventListener('input',()=>{s.text=t.value;save()});const shot=document.createElement('p');shot.textContent='映像 ｜ '+s.shot;c.append(label,t,shot);card.append(meta,c);panel.append(card)})}else{const edit=document.createElement('textarea');edit.className='editor';edit.value=state[active];edit.setAttribute('aria-label',descriptions[active]);edit.addEventListener('input',()=>{state[active]=edit.value;save()});panel.append(edit)} }
-async function copy(text){try{await navigator.clipboard.writeText(text);toast('コピーしました')}catch{const t=document.createElement('textarea');t.value=text;document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();toast(ok?'コピーしました':'コピーできませんでした。保存機能をご利用ください。')}}
-$('#form').addEventListener('submit',e=>{e.preventDefault();const theme=$('#theme').value.trim();if(!theme){$('#theme').setCustomValidity('テーマを入力してください');$('#theme').reportValidity();return}state=makeState(theme,$('#tone').value,$('#audience').value);$('#status').textContent='作成済み';save();render();toast('4種類の制作素材を作成しました');if(innerWidth<681)document.querySelector('.result').scrollIntoView({behavior:'smooth',block:'start'})});
-$('#theme').addEventListener('input',()=>$('#theme').setCustomValidity(''));
-document.querySelectorAll('[data-example]').forEach(b=>b.addEventListener('click',()=>{$('#theme').value=b.dataset.example;$('#theme').setCustomValidity('');$('#theme').focus()}));
-document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{active=b.dataset.tab;render()}));
-$('#copy-tab').addEventListener('click',()=>copy(currentText()));$('#all-copy').addEventListener('click',()=>copy(allText()));
-$('#download').addEventListener('click',()=>{const a=document.createElement('a');const url=URL.createObjectURL(new Blob(['\uFEFF'+(active==='subtitle'?state.subtitle:allText())],{type:'text/plain;charset=utf-8'}));a.href=url;a.download=`amekaji-${new Date().toISOString().slice(0,10)}.${active==='subtitle'?'srt':'txt'}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('ファイルを保存しました')});
-try{const data=JSON.parse(localStorage.getItem('amekaji-v1'));if(data?.state?.scenes?.length===6&&typeof data.state.prompt==='string'){state=data.state;$('#theme').value=data.theme;$('#tone').value=data.tone;$('#audience').value=data.audience;$('#status').textContent='保存済み'}}catch{}
-if(!state)state=makeState($('#theme').value,$('#tone').value,$('#audience').value);render();
+'use strict';
+const $ = s => document.querySelector(s);
+const labels = { script:'台本', subtitle:'字幕', narration:'ナレーション', prompt:'画像プロンプト', posting:'投稿文' };
+const filenames = { script:'script.txt', subtitle:'subtitles.srt', narration:'narration.txt', prompt:'image-prompts.txt', posting:'posting.txt' };
+const descriptions = {
+  script:'各5秒・全6シーン。台本はタップして編集できます。',
+  subtitle:'6シーンのSRT字幕。タイムコードも編集できます。',
+  narration:'シーンごとの読み上げ原稿。30秒に収まるよう読み速度を調整してください。',
+  prompt:'9:16・全身・服装・背景・構図を指定。画像自体は生成しません。',
+  posting:'YouTube Shorts・TikTokのタイトル、投稿文、ハッシュタグ。'
+};
+let active = 'script', state, history = [], activeHistoryId = null;
+function toast(message) {
+  $('#toast').textContent = message; $('#toast').classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => $('#toast').classList.remove('show'), 3600);
+}
+function readStorage(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
+function save() {
+  if (activeHistoryId) {
+    const entry = history.find(h => h.id === activeHistoryId);
+    if (entry) entry.state = JSON.parse(JSON.stringify(state));
+  }
+  try {
+    localStorage.setItem('amekaji-v1', JSON.stringify({ state, theme:state.theme, tone:state.tone, audience:state.audience, activeHistoryId }));
+    localStorage.setItem('amekaji-history-v2', JSON.stringify(history));
+    $('#storage-note').textContent = 'この端末のブラウザに自動保存。直近10件を履歴から再利用できます。';
+    return true;
+  } catch {
+    $('#storage-note').textContent = '端末に保存できません。閉じる前にZIPまたはTXTで保存してください。';
+    return false;
+  }
+}
+function edited() { if (!save()) toast('端末への保存ができません。ZIPまたはTXTで保存してください。'); }
+function syncForm() { $('#theme').value=state.theme; $('#tone').value=state.tone; $('#audience').value=state.audience; $('#style').value=state.style; }
+function currentText() { return Studio.files(state)[filenames[active]]; }
+function download(blob, name) {
+  const a=document.createElement('a'), url=URL.createObjectURL(blob);
+  a.href=url; a.download=name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000); toast('ダウンロードを開始しました');
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast('コピーしました'); }
+  catch {
+    const t=document.createElement('textarea'); t.value=text; document.body.append(t); t.select();
+    let ok=false; try { ok=document.execCommand('copy'); } catch {} t.remove();
+    toast(ok ? 'コピーしました' : 'コピーできませんでした。TXT保存をご利用ください。');
+  }
+}
+function renderHistory() {
+  const list=$('#history-list'); list.replaceChildren();
+  $('#history-empty').hidden=history.length > 0;
+  history.forEach(entry => {
+    const b=document.createElement('button'); b.type='button'; b.className='history-item';
+    const name=document.createElement('strong'); name.textContent=entry.state.theme;
+    const note=document.createElement('span'); note.textContent=`${Studio.styles[entry.state.style].name} ／ ${new Date(entry.savedAt).toLocaleString('ja-JP')}`;
+    b.append(name,note);
+    b.addEventListener('click', () => {
+      state=Studio.normalize(JSON.parse(JSON.stringify(entry.state))); activeHistoryId=entry.id;
+      syncForm(); const saved=save(); render(); $('#status').textContent='履歴から復元';
+      toast(saved ? '編集内容を含めて履歴から復元しました' : '復元しました。端末に保存できないためファイルで保存してください。');
+      if(innerWidth<681) $('.result').scrollIntoView({behavior:'smooth',block:'start'});
+    }); list.append(b);
+  });
+}
+function render() {
+  $('#concept').textContent=state.theme;
+  $('#tone-label').textContent=Studio.styles[state.style].name;
+  $('#outfit').value=state.outfit;
+  $('#panel-description').textContent=descriptions[active];
+  $('#download').textContent=active==='subtitle' ? 'SRTで保存 ↓' : `${labels[active]}をTXT保存 ↓`;
+  document.querySelectorAll('[data-tab]').forEach(b => {
+    const selected=b.dataset.tab===active; b.classList.toggle('active',selected); b.setAttribute('aria-pressed',selected);
+  });
+  const panel=$('#panel'); panel.replaceChildren();
+  if(active==='script') state.scenes.forEach((scene,i) => {
+    const card=document.createElement('article'); card.className='scene';
+    const meta=document.createElement('div'); meta.className='scene-meta';
+    meta.innerHTML=`<strong>${String(i+1).padStart(2,'0')}</strong><span>${String(i*5).padStart(2,'0')}–${String((i+1)*5).padStart(2,'0')}s</span>`;
+    const content=document.createElement('div'); content.className='scene-content';
+    const label=document.createElement('span'); label.textContent=['HOOK / つかみ','OUTFIT / 全身','DETAIL / 素材','POINT / 合わせ方','STYLING / 足元','CLOSING / 締め'][i];
+    const t=document.createElement('textarea'); t.value=scene.text; t.rows=2; t.setAttribute('aria-label',`シーン${i+1}の台本`);
+    t.addEventListener('input',() => { scene.text=t.value; edited(); });
+    const shot=document.createElement('p'); shot.textContent='映像 ｜ '+scene.shot;
+    content.append(label,t,shot); card.append(meta,content); panel.append(card);
+  }); else {
+    const edit=document.createElement('textarea'); edit.className='editor'; edit.value=state[active]; edit.setAttribute('aria-label',labels[active]);
+    edit.addEventListener('input', () => { state[active]=edit.value; edited(); }); panel.append(edit);
+  }
+  renderHistory();
+}
+$('#form').addEventListener('submit', event => {
+  event.preventDefault(); const theme=$('#theme').value.trim();
+  if(!theme) { $('#theme').setCustomValidity('テーマを入力してください'); $('#theme').reportValidity(); return; }
+  state=Studio.makeState(theme,$('#tone').value,$('#audience').value,$('#style').value);
+  history=Studio.addHistory(history,state); activeHistoryId=history[0].id;
+  const saved=save(); active='script'; render(); $('#status').textContent='作成済み';
+  toast(saved ? '5種類の素材をテンプレートで作成し、履歴に保存しました' : '素材を作成しました。端末に保存できないためZIPで保存してください。');
+  if(innerWidth<681) $('.result').scrollIntoView({behavior:'smooth',block:'start'});
+});
+$('#theme').addEventListener('input', () => $('#theme').setCustomValidity(''));
+$('#outfit').addEventListener('input', () => { state.outfit=$('#outfit').value; edited(); });
+document.querySelectorAll('[data-example]').forEach(b => b.addEventListener('click', () => { $('#theme').value=b.dataset.example; $('#theme').setCustomValidity(''); $('#theme').focus(); }));
+document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { active=b.dataset.tab; render(); }));
+$('#copy-tab').addEventListener('click', () => copy(currentText()));
+$('#all-copy').addEventListener('click', () => copy(Studio.allText(state)));
+$('#download').addEventListener('click', () => download(new Blob(['\ufeff'+currentText()], {type:'text/plain;charset=utf-8'}), filenames[active]));
+$('#zip-download').addEventListener('click', () => {
+  try { download(StudioZip.zip(Studio.files(state)), 'amekaji-materials.zip'); }
+  catch { toast('ZIPを作成できませんでした。各素材をTXT/SRTで保存してください。'); }
+});
+const storedHistory=readStorage('amekaji-history-v2');
+if(Array.isArray(storedHistory)) history=storedHistory.filter(e => e && typeof e.id==='string' && !isNaN(Date.parse(e.savedAt)) && Studio.normalize(e.state)).slice(0,10).map(e => ({...e,state:Studio.normalize(e.state)}));
+const previous=readStorage('amekaji-v1');
+state=Studio.normalize(previous?.state);
+if(state) { activeHistoryId=typeof previous.activeHistoryId==='string' ? previous.activeHistoryId : null; $('#status').textContent='保存済み'; syncForm(); }
+else state=Studio.makeState($('#theme').value,$('#tone').value,$('#audience').value,$('#style').value);
+render();
