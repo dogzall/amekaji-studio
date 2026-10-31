@@ -52,16 +52,16 @@ test('manifest names, standalone mode, scope and real PNG dimensions', () => {
 });
 test('all shell files, query URLs and both entry documents work offline', async () => {
   const w = worker(); await w.lifecycle('install'); await w.lifecycle('activate');
-  assert.equal(w.requests.length, 9); assert(w.requests.every(r => r.cache === 'reload'));
+  assert.equal(w.requests.length, 11); assert(w.requests.every(r => r.cache === 'reload'));
   for (const r of w.requests) assert((await (await w.fetch(r.url)).text()).startsWith('cached:'));
   assert((await (await w.fetch(base + '?source=home')).text()).startsWith('cached:'));
   assert((await (await w.fetch(base + 'app.js?v=1')).text()).startsWith('cached:'));
   assert.equal(w.network(), 0);
 });
 test('activation removes only this app’s old cache and never touches saved drafts', async () => {
-  const w = worker(); w.stores.set('amekaji-studio-shell-v0', new Map()); w.stores.set('other-app-v1', new Map());
+  const w = worker(); w.stores.set('amekaji-studio-shell-v0', new Map()); w.stores.set('amekaji-studio-shell-v1', new Map()); w.stores.set('other-app-v1', new Map());
   await w.lifecycle('install'); await w.lifecycle('activate');
-  assert(!w.stores.has('amekaji-studio-shell-v0')); assert(w.stores.has('other-app-v1')); assert(w.stores.has('amekaji-studio-shell-v1'));
+  assert(!w.stores.has('amekaji-studio-shell-v0')); assert(w.stores.has('other-app-v1')); assert(!w.stores.has('amekaji-studio-shell-v1')); assert(w.stores.has('amekaji-studio-shell-v2'));
   assert.equal(w.claims(), 1); assert(!read('sw.js').includes('localStorage')); assert(!read('sw.js').includes('skipWaiting('));
 });
 test('unrelated routes, origins and non-GET requests are untouched', () => {
@@ -82,11 +82,9 @@ test('registration is secure, scoped, separate and failure tolerant', async () =
   }
 });
 test('existing generator still returns all four materials for 21 combinations', () => {
-  const context = vm.createContext({ document: {} });
-  vm.runInContext(read('app.js').split("$('#form').addEventListener")[0], context);
+  const { makeState } = require('../materials.js');
   for (const theme of ['デニム','ブーツ','ネルシャツ','スウェット','白T','ミリタリー','夏の着こなし']) for (const tone of ['guide','story','tips']) {
-    context.theme = theme; context.tone = tone;
-    const s = vm.runInContext("makeState(theme,tone,'アメカジ初心者')", context);
-    assert.equal(s.scenes.length, 6); assert(s.subtitle.includes('00:00:30,000')); assert(s.narration.includes(theme)); assert.equal((s.prompt.match(/【CUT/g)||[]).length, 6);
+    const s = makeState(theme, tone, 'アメカジ初心者');
+    assert.equal(s.scenes.length, 6); assert(s.subtitle.includes('00:00:30,000')); assert(s.narration.includes(theme)); assert.equal((s.prompt.match(/【SCENE/g)||[]).length, 6);
   }
 });
