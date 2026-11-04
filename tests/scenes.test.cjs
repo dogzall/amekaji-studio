@@ -78,7 +78,7 @@ test('invalid legacy records fail safely and unstructured v1 scene captions get 
  const s=Studio.normalize(legacy);assert.equal(s.subtitle,legacy.subtitle);assert(s.scenes.every(x=>typeof x.subtitle==='string' && SceneKit.validConfig(x)));assert(Studio.saveScene(s,0,clone(s.scenes[0])));
 });
 test('scene logic runs with no network globals; PWA cache owns its version only',()=>{
- const sw=fs.readFileSync(path.join(__dirname,'../sw.js'),'utf8');assert(sw.includes("VERSION = 'v3'"));assert(sw.includes("'scene-kit.js'"));assert(!sw.includes('localStorage'));assert(!sw.includes('skipWaiting('));
+ const sw=fs.readFileSync(path.join(__dirname,'../sw.js'),'utf8');assert(sw.includes("VERSION = 'v3-root-fix-1'"));assert(sw.includes("'scene-kit.js'"));assert(!sw.includes('localStorage'));assert(!sw.includes('skipWaiting('));
  for(const name of ['scene-kit.js','materials.js','app.js','zip.js'])assert(!/\bfetch\s*\(|XMLHttpRequest|https?:\/\//.test(fs.readFileSync(path.join(__dirname,'..',name),'utf8')));
  const css=fs.readFileSync(path.join(__dirname,'../style.css'),'utf8');assert(css.includes('@media(max-width:680px){.scene-fields{grid-template-columns:minmax(0,1fr)}'));assert(css.includes('min-height:48px'));assert(css.includes('font-size:16px'));
 });
