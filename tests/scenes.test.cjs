@@ -18,7 +18,7 @@ test('six unique models and six unique complete outfits in all 4 styles',()=>{
  }
 });
 test('brand, item and explicit color constraints are kept with varied outfits',()=>{
- for(const [t,group,brand,item] of [['Carharttのダブルニー','pants','Carhartt','ダブルニー'],["Levi’s 501",'pants',"Levi's",'501'],['古着のネルシャツ','outer','ヴィンテージ古着','ネルシャツ'],['Championのパーカ','top','Champion','パーカ']]) {
+ for(const [t,group,brand,item] of [['Carharttのダブルニー','pants','Carhartt','ダブルニー'],["Levi’s 501",'pants',"Levi's",'501'],['古着のネルシャツ','outer','','ネルシャツ'],['Championのパーカ','top','Champion','パーカ']]) {
   Studio.makeState(t).scenes.forEach(s=>{assert.equal(s[group].brand,brand);assert(s[group].type.includes(item));});
  }
  const s=Studio.makeState('Championの白TとDickiesのブラック874');
@@ -78,7 +78,7 @@ test('invalid legacy records fail safely and unstructured v1 scene captions get 
  const s=Studio.normalize(legacy);assert.equal(s.subtitle,legacy.subtitle);assert(s.scenes.every(x=>typeof x.subtitle==='string' && SceneKit.validConfig(x)));assert(Studio.saveScene(s,0,clone(s.scenes[0])));
 });
 test('scene logic runs with no network globals; PWA cache owns its version only',()=>{
- const sw=fs.readFileSync(path.join(__dirname,'../sw.js'),'utf8');assert(sw.includes("VERSION = 'v3-root-fix-1'"));assert(sw.includes("'scene-kit.js'"));assert(!sw.includes('localStorage'));assert(!sw.includes('skipWaiting('));
+ const sw=fs.readFileSync(path.join(__dirname,'../sw.js'),'utf8');assert(sw.includes("VERSION = 'v3.1-brands-1'"));assert(sw.includes("'scene-kit.js'"));assert(!sw.includes('localStorage'));assert(!sw.includes('skipWaiting('));
  for(const name of ['scene-kit.js','materials.js','app.js','zip.js'])assert(!/\bfetch\s*\(|XMLHttpRequest|https?:\/\//.test(fs.readFileSync(path.join(__dirname,'..',name),'utf8')));
  const css=fs.readFileSync(path.join(__dirname,'../style.css'),'utf8');assert(css.includes('@media(max-width:680px){.scene-fields{grid-template-columns:minmax(0,1fr)}'));assert(css.includes('min-height:48px'));assert(css.includes('font-size:16px'));
 });

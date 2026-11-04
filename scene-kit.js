@@ -1,6 +1,7 @@
 /* Ver.3: structured model/outfit data and local image prompt generation. */
 (function(root) {
   'use strict';
+  const brandRules=typeof module!=='undefined'&&module.exports?require('./brand-rules.js'):root.BrandRules;
   const copy = value => JSON.parse(JSON.stringify(value));
   const models = [
     { age:'40代', hair:'短髪', beard:'なし', body:'標準体型', mood:'落ち着いた男性' },
@@ -72,7 +73,7 @@
     return `モデル：${describe(scene.model)}\nアウター：${describe(scene.outer)}\nトップス：${describe(scene.top)}\nパンツ：${describe(scene.pants)}\n靴：${describe(scene.shoes)}`;
   }
   function prompt(scene, i, state) {
-    return `【SCENE ${i+1} / ${i*5}–${(i+1)*5}秒】\nテーマ：${state.theme}\n縦型9:16、明るく自然な実写風ファッション写真。成人モデル一人。\n${state.mode==='same'?'全シーンで同一人物・同一服装を使用し、ポーズとカメラアングルを変える。':'このシーン固有のモデルとコーディネート。他のシーンのモデル・服装とは区別する。'}\n服装：\n${summary(scene)}\n背景：${scene.background.place}、${scene.background.time}、${scene.background.mood}\n構図：ポーズ・カメラアングル：${scene.pose}\n頭から靴先まで人物全身を収め、顔と靴先を切らない。字幕用に画面上部に十分な余白。自然光、服の色と素材が分かる明るさ、自然な遠近感。文字・透かし・不要なブランドロゴを描画しない。`;
+    return `【SCENE ${i+1} / ${i*5}–${(i+1)*5}秒】\nテーマ：${state.generationTheme??state.theme}\n縦型9:16、明るく自然な実写風ファッション写真。成人モデル一人。\n${state.mode==='same'?'全シーンで同一人物・同一服装を使用し、ポーズとカメラアングルを変える。':'このシーン固有のモデルとコーディネート。他のシーンのモデル・服装とは区別する。'}\n服装：\n${summary(scene)}\n背景：${scene.background.place}、${scene.background.time}、${scene.background.mood}\n構図：ポーズ・カメラアングル：${scene.pose}\n頭から靴先まで人物全身を収め、顔と靴先を切らない。字幕用に画面上部に十分な余白。自然光、服の色と素材が分かる明るさ、自然な遠近感。文字・透かし・不要なブランドロゴを描画しない。`;
   }
   function aggregates(state) {
     state.subtitle=state.scenes.map((s,i)=>`${i+1}\n00:00:${String(i*5).padStart(2,'0')},000 --> 00:00:${String((i+1)*5).padStart(2,'0')},000\n${s.subtitle}`).join('\n\n');
@@ -82,11 +83,13 @@
   function baseline(scene) {
     const { initial, ...rest }=scene; return copy(rest);
   }
-  function build(state, mode='multi') {
+  function build(state, mode='multi', brandSettings=null) {
+    const plan=brandSettings?brandRules.plan(state.theme,state.style,brandSettings,mode):null;
+    if(plan){state.brandSettings=plan.settings;state.brandWarnings=plan.warnings;state.generationTheme=plan.generationTheme;state.release='3.1';}
     state.version=3; state.mode=mode==='same'?'same':'multi';
     state.scenes=state.scenes.map((s,i)=>{
       const k=state.mode==='same'?0:i;
-      const configured={...s, subtitle:typeof s.subtitle==='string'?s.subtitle:s.text, narration:typeof s.narration==='string'?s.narration:s.text, model:copy(models[k]), ...outfit(state.theme,state.style,k), background:{place:i===0&&state.backgroundHint?state.backgroundHint.split('、')[0]:['赤レンガ倉庫の前','コンクリート壁の街角','古着屋の木製ドアの前','並木道','静かなカフェの外壁','公園の遊歩道'][i],time:i===0&&state.backgroundHint?.includes('、')?state.backgroundHint.split('、').slice(1).join('、'):i%2?'午前の自然光':'午後の自然光',mood:'明るく落ち着いた雰囲気'},pose:s.shot};
+      const configured={...s, subtitle:typeof s.subtitle==='string'?s.subtitle:s.text, narration:typeof s.narration==='string'?s.narration:s.text, model:copy(models[k]), ...(plan?plan.outfits[k]:outfit(state.theme,state.style,k)), background:{place:i===0&&state.backgroundHint?state.backgroundHint.split('、')[0]:['赤レンガ倉庫の前','コンクリート壁の街角','古着屋の木製ドアの前','並木道','静かなカフェの外壁','公園の遊歩道'][i],time:i===0&&state.backgroundHint?.includes('、')?state.backgroundHint.split('、').slice(1).join('、'):i%2?'午前の自然光':'午後の自然光',mood:'明るく落ち着いた雰囲気'},pose:s.shot};
       configured.prompt=prompt(configured,i,state); configured.initial=baseline(configured); return configured;
     });
     state.outfit=state.scenes.map((s,i)=>`SCENE ${i+1}\n${summary(s)}`).join('\n\n');

@@ -1,6 +1,7 @@
 /* Local, deterministic templates. No network requests or AI service. */
 (function (root) {
   'use strict';
+  const brandRules=typeof module!=='undefined'&&module.exports?require('./brand-rules.js'):root.BrandRules;
   const kit = typeof module !== 'undefined' && module.exports ? require('./scene-kit.js') : root.SceneKit;
   const styles = {
     classic: { name: '王道アメカジ', top: '白のヘビーウェイトTシャツ', outer: 'Carharttのブラウンのダックジャケット', pants: "Levi’s 501のインディゴデニム", shoes: '茶色のレザーブーツ', fit: 'ジャストサイズの上半身とストレートパンツ', bg: '赤レンガ倉庫の前、午後の自然光', tip: '茶とインディゴで、王道の配色に。', tag: '王道アメカジ' },
@@ -33,11 +34,13 @@
     return { ...look, brands, focus: name, text: `トップス：${look.top}\n羽織り：${look.outer}\nパンツ：${look.pants}\n靴：${look.shoes}\nバランス：${s.fit}` };
   }
   const srt = scenes => scenes.map((s, i) => `${i + 1}\n00:00:${String(i * 5).padStart(2, '0')},000 --> 00:00:${String((i + 1) * 5).padStart(2, '0')},000\n${s.subtitle}`).join('\n\n');
-  function makeState(theme, tone = 'guide', audience = 'アメカジ初心者', style = 'classic', mode = 'multi') {
+  function makeState(theme, tone = 'guide', audience = 'アメカジ初心者', style = 'classic', mode = 'multi', brandSettings = {mode:'auto',selected:[]}) {
     theme = String(theme).trim().slice(0, 120);
     if (!theme) throw new Error('テーマを入力してください');
     if (!Object.hasOwn(styles, style)) style = 'classic';
-    const s = styles[style], look = outfitFor(theme, style);
+    const requestedTheme=theme, config=brandSettings===null?null:brandRules.settings(brandSettings), plan=config?brandRules.plan(theme,style,config,mode):null;
+    theme=plan?plan.generationTheme:theme;
+    const s = styles[style], look = plan?{text:'',brands:plan.usedBrands}:outfitFor(theme,style);
     const brief = theme.length > 22 ? theme.slice(0, 22) + '…' : theme;
     const lines = [
       tone === 'story' ? `「${brief}」。好きな服で、今日を変える。` : tone === 'tips' ? `「${brief}」。合わせ方のコツは？` : `「${brief}」。30秒で着こなしのヒント。`,
@@ -48,25 +51,25 @@
       'あなたならどう着る？ 保存して、次のコーデに。'
     ];
     const shots = ['全身正面、両足を入れた引きの構図', '全身を斜め45度から、羽織りを軽く開く', '全身を画面に収め、片手で素材の裾を示す', '全身正面、腕を自然に下ろし上下のバランスを見せる', '全身の横姿、靴とパンツの丈が分かる構図', '全身正面、自然な立ち姿で締める'];
-    const scenes = lines.map((text, i) => ({ text, subtitle: [brief, '全身のバランスから', '素材とディテール', s.tip, '足元と丈を整える', '保存して次のコーデへ'][i], narration: text, shot: shots[i], prompt: `【SCENE ${i + 1} / ${i * 5}–${(i + 1) * 5}秒】\nテーマ：${theme}\nスタイル：${s.name}。対象：${audience}。\n縦型9:16、実写のファッション写真。${style === 'adult' ? '40代の成人モデル' : '成人モデル'}一人。全シーンで同一人物・同一服装。頭から靴先まで人物全身を収め、頭上と足元に余白を残す。\n服装：${look.top}、${look.outer}、${look.pants}、${look.shoes}。${s.fit}。\n背景：${s.bg}。構図：${shots[i]}。カメラは腰の高さ、自然な遠近感、服の質感が見える明るさ。${tone === 'story' ? 'フィルム映画のような落ち着いた色調。' : '服の色と形がはっきり分かる自然な色調。'}\n字幕用に上部に余白。文字・透かし・ブランドロゴの描画なし。顔や足先を切らない。` }));
+    const scenes = lines.map((text,i)=>({text,subtitle:[brief,'全身のバランスから','素材とディテール',s.tip,'足元と丈を整える','保存して次のコーデへ'][i],narration:text,shot:shots[i],prompt:''}));
     const tags = [...new Set(['#アメカジ', '#' + s.tag, '#コーデ', ...look.brands.map(b => '#' + b.replace(/[^\p{L}\p{N}_]/gu, ''))])].join(' ');
     const title = `${theme}｜${s.name}の着こなし`.slice(0, 90);
-    return kit.build({ theme, tone, audience, style, backgroundHint:s.bg, outfit: look.text, scenes, subtitle: srt(scenes), narration: scenes.map((s,i) => `【${i * 5}–${(i + 1) * 5}秒】\n${s.narration}`).join('\n\n'), prompt: scenes.map(s => s.prompt).join('\n\n'), posting: `【YouTube Shorts】\nタイトル：${title}\n投稿文：${theme}を${s.name}で。素材・配色・シルエットを6シーンで紹介。次のコーデ用に保存してみてください。\n${tags} #Shorts\n\n【TikTok】\nタイトル：${title}\n投稿文：今日のテーマは「${theme}」。${s.name}なら、あなたはどう合わせる？ お気に入りの合わせ方をコメントで教えてください。\n${tags} #TikTok\n\n※ローカルテンプレートで作成した下書きです。実際の着用品に合わせて編集してください。`, createdAt: new Date().toISOString() }, mode);
+    return kit.build({ theme:requestedTheme, tone, audience, style, backgroundHint:s.bg, outfit: look.text, scenes, subtitle: srt(scenes), narration: scenes.map((s,i) => `【${i * 5}–${(i + 1) * 5}秒】\n${s.narration}`).join('\n\n'), prompt: scenes.map(s => s.prompt).join('\n\n'), posting: `【YouTube Shorts】\nタイトル：${title}\n投稿文：${theme}を${s.name}で。素材・配色・シルエットを6シーンで紹介。次のコーデ用に保存してみてください。\n${tags} #Shorts\n\n【TikTok】\nタイトル：${title}\n投稿文：今日のテーマは「${theme}」。${s.name}なら、あなたはどう合わせる？ お気に入りの合わせ方をコメントで教えてください。\n${tags} #TikTok\n\n※ローカルテンプレートで作成した下書きです。実際の着用品に合わせて編集してください。`, createdAt: new Date().toISOString() }, mode, config);
   }
   function normalize(value) {
     if (!value || typeof value.theme !== 'string' || !value.theme.trim() || !Array.isArray(value.scenes) || value.scenes.length !== 6 || !value.scenes.every(s => s && typeof s.text === 'string' && typeof s.shot === 'string')) return null;
-    const defaults = makeState(value.theme, value.tone, value.audience, value.style);
-    return kit.migrate({ ...defaults, ...value, version:value.version, mode:value.mode, style: Object.hasOwn(styles, value.style) ? value.style : 'classic', tone: ['guide','story','tips'].includes(value.tone) ? value.tone : 'guide', audience: typeof value.audience === 'string' ? value.audience : 'アメカジ初心者', posting: typeof value.posting === 'string' ? value.posting : defaults.posting, outfit: typeof value.outfit === 'string' ? value.outfit : defaults.outfit, ...Object.fromEntries(['subtitle','narration','prompt'].map(k => [k, typeof value[k] === 'string' ? value[k] : defaults[k]])) });
+    const defaults = makeState(value.theme, value.tone, value.audience, value.style, value.mode, null);
+    return kit.migrate({ ...defaults, ...value, version:value.version, mode:value.mode, release:typeof value.release==='string'?value.release:'legacy', brandSettings:brandRules.settings(value.brandSettings), generationTheme:typeof value.generationTheme==='string'?value.generationTheme:value.theme, style: Object.hasOwn(styles, value.style) ? value.style : 'classic', tone: ['guide','story','tips'].includes(value.tone) ? value.tone : 'guide', audience: typeof value.audience === 'string' ? value.audience : 'アメカジ初心者', posting: typeof value.posting === 'string' ? value.posting : defaults.posting, outfit: typeof value.outfit === 'string' ? value.outfit : defaults.outfit, ...Object.fromEntries(['subtitle','narration','prompt'].map(k => [k, typeof value[k] === 'string' ? value[k] : defaults[k]])) });
   }
   function files(state) {
     const script = state.scenes.map((s,i) => `SCENE ${i + 1} / ${i * 5}–${(i + 1) * 5}秒\n${s.text}\n${kit.summary(s)}\n背景：${Object.values(s.background).join('・')}\n映像：${s.pose}`).join('\n\n');
-    return { 'script.txt': `テーマ：${state.theme}\nスタイル：${styles[state.style]?.name || styles.classic.name}\n\n${state.outfit}\n\n${script}`, 'subtitles.srt': state.subtitle, 'narration.txt': state.narration, 'image-prompts.txt': state.prompt, 'posting.txt': state.posting };
+    return { 'script.txt': `テーマ：${state.theme}\nスタイル：${styles[state.style]?.name || styles.classic.name}\nブランド設定：${state.brandSettings?.mode==='selected'?'指定／'+state.brandSettings.selected.map(id=>brandRules.brands.find(b=>b.id===id)?.name).filter(Boolean).join('・'):'おまかせ'}\n\n${state.outfit}\n\n${script}`, 'subtitles.srt': state.subtitle, 'narration.txt': state.narration, 'image-prompts.txt': state.prompt, 'posting.txt': state.posting };
   }
   function allText(state) { return Object.entries(files(state)).map(([name,text]) => `【${name}】\n${text}`).join('\n\n'); }
   function addHistory(list, state, now = Date.now()) {
     return [{ id: String(now) + '-' + Math.random().toString(36).slice(2,8), savedAt: new Date(now).toISOString(), state: clone(state) }, ...list].slice(0, 10);
   }
-  const api = { saveScene:kit.saveScene, resetScene:kit.resetScene, sceneFields:kit.fields, sceneGroupNames:kit.groupNames, sceneSummary:kit.summary, styles, makeState, normalize, outfitFor, files, allText, addHistory };
+  const api = { brandCatalogue:brandRules.brands, brandGroups:brandRules.categories, brandSettings:brandRules.settings, analyzeBrands:brandRules.analyze, saveScene:kit.saveScene, resetScene:kit.resetScene, sceneFields:kit.fields, sceneGroupNames:kit.groupNames, sceneSummary:kit.summary, styles, makeState, normalize, outfitFor, files, allText, addHistory };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Studio = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
