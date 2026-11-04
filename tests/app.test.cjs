@@ -65,3 +65,37 @@ test('blank input does not replace the current result and HTML-like input remain
   const a=app();const before=a.els['#concept'].textContent;a.els['#theme'].value=' ';await a.submit();assert.equal(a.els['#concept'].textContent,before);
   a.els['#theme'].value='<img src=x onerror=alert(1)>';await a.submit();assert.equal(a.els['#concept'].textContent,'<img src=x onerror=alert(1)>');assert.equal(a.els['#concept'].children.length,0);
 });
+function control(element,aria){
+ if(element.attrs?.['aria-label']===aria)return element;
+ for(const child of element.children||[]){const found=control(child,aria);if(found)return found;}
+}
+test('Ver.3 collapsible panel edits are drafts until saved, update copy/history, and reset',async()=>{
+ const a=app();await a.submit();
+ let first=a.els['#panel'].children[0],other=JSON.stringify(a.context.Studio.normalize(JSON.parse(a.store.get('amekaji-v1')).state).scenes.slice(1));
+ const baseline=JSON.parse(a.store.get('amekaji-v1')).state.scenes[0].top.color;
+ const input=control(first,'シーン1 色'); // first color control belongs to outer
+ input.value='金色';await input.emit('input');
+ await a.els['#copy-tab'].click();assert(!a.copied.at(-1).includes('金色'));
+ await control(first,'シーン1を保存').click();await a.tab('prompt');await a.els['#copy-tab'].click();assert(a.copied.at(-1).includes('金色'));
+ const saved=JSON.parse(a.store.get('amekaji-v1')).state;
+ assert.equal(JSON.stringify(saved.scenes.slice(1)),other);assert.equal(saved.scenes[0].outer.color,'金色');
+ const b=app({store:a.store});first=b.els['#panel'].children[0];await control(first,'シーン1を初期提案に戻す').click();
+ assert.notEqual(JSON.parse(b.store.get('amekaji-v1')).state.scenes[0].outer.color,'金色');assert.equal(JSON.parse(b.store.get('amekaji-v1')).state.scenes[0].top.color,baseline);
+});
+test('Ver.3 same mode shares model/clothes and keeps per-scene subtitle edits independent',async()=>{
+ const a=app();a.els['#mode'].value='same';await a.submit();
+ let first=a.els['#panel'].children[0];const hair=control(first,'シーン1 髪型');hair.value='変更した髪型';await hair.emit('input');
+ const sub=control(first,'シーン1 字幕');sub.value='個別字幕';await sub.emit('input');
+ await control(first,'シーン1を保存').click();
+ const s=JSON.parse(a.store.get('amekaji-v1')).state;assert(s.scenes.every(x=>x.model.hair==='変更した髪型'));assert.equal(s.scenes[0].subtitle,'個別字幕');assert.notEqual(s.scenes[1].subtitle,'個別字幕');
+ await a.tab('subtitle');await a.els['#download'].click();assert((await a.downloads.at(-1).text()).includes('個別字幕'));
+});
+test('Ver.3 saving settings does not undo an inline script edit',async()=>{
+ const a=app();await a.submit();const card=a.els['#panel'].children[0];
+ const inline=card.children[1].children[1];inline.value='残したい台本';await inline.emit('input');
+ await control(card,'シーン1を保存').click();assert.equal(JSON.parse(a.store.get('amekaji-v1')).state.scenes[0].text,'残したい台本');
+});
+test('Ver.3 scene panels use native collapsed details and accessible text controls',async()=>{
+ const a=app();await a.submit();const panels=a.els['#panel'].children.map(c=>c.children[2]);assert.equal(panels.length,6);
+ panels.forEach((p,i)=>{assert.equal(p.open,false);for(const title of ['年代','髪型','ひげ','体型','雰囲気','場所','時間帯','ポーズ・カメラアングル','字幕','ナレーション'])assert(control(p,`シーン${i+1} ${title}`));assert(control(p,`シーン${i+1}を保存`));assert(control(p,`シーン${i+1}を初期提案に戻す`));});
+});
