@@ -18,7 +18,7 @@ class Element {
   setCustomValidity(value) { this.validity=value; }
   reportValidity() {} focus() {} select() {} remove() {} scrollIntoView() {}
 }
-function app({store=new Map(),deny=false}={}) {
+function app({store=new Map(),deny=false,browserScripts=false}={}) {
   const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'), els={};
   for(const id of html.matchAll(/id="([^"]+)"/g)) els['#'+id[1]]=new Element();
   els['.result']=new Element();
@@ -27,6 +27,7 @@ function app({store=new Map(),deny=false}={}) {
   const examples=[...html.matchAll(/data-example="([^"]+)"/g)].map(m=>{const e=new Element();e.dataset.example=m[1];return e;});
   const downloads=[],copied=[],localStorage={getItem:k=>{if(deny)throw Error('blocked');return store.get(k)||null;},setItem:(k,v)=>{if(deny)throw Error('quota');store.set(k,v);}};
   const context=vm.createContext({Studio,StudioZip,document:{querySelector:s=>{assert(els[s],`Missing selector ${s}`);return els[s];},querySelectorAll:s=>s==='[data-tab]'?tabs:examples,createElement:()=>new Element(),body:new Element(),execCommand:()=>true},localStorage,innerWidth:393,navigator:{clipboard:{writeText:async text=>copied.push(text)}},Blob,URL:{createObjectURL:b=>{downloads.push(b);return 'blob:fake';},revokeObjectURL(){}},setTimeout:()=>0,clearTimeout(){},console});
+  if(browserScripts) { delete context.Studio; delete context.StudioZip; for(const name of ['scene-kit.js','materials.js','zip.js']) vm.runInContext(fs.readFileSync(path.join(__dirname,'..',name),'utf8'),context); }
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../app.js'),'utf8'),context);
   return {els,tabs,store,downloads,copied,context,submit:()=>els['#form'].emit('submit'),tab:async name=>tabs.find(t=>t.dataset.tab===name).click()};
 }
@@ -98,4 +99,14 @@ test('Ver.3 saving settings does not undo an inline script edit',async()=>{
 test('Ver.3 scene panels use native collapsed details and accessible text controls',async()=>{
  const a=app();await a.submit();const panels=a.els['#panel'].children.map(c=>c.children[2]);assert.equal(panels.length,6);
  panels.forEach((p,i)=>{assert.equal(p.open,false);for(const title of ['年代','髪型','ひげ','体型','雰囲気','場所','時間帯','ポーズ・カメラアングル','字幕','ナレーション'])assert(control(p,`シーン${i+1} ${title}`));assert(control(p,`シーン${i+1}を保存`));assert(control(p,`シーン${i+1}を初期提案に戻す`));});
+});
+
+test('real browser script order initializes Ver.3 globals and six editing panels',async()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ const scripts=[...html.matchAll(/<script src="([^"]+)"/g)].map(m=>m[1]);
+ assert.deepEqual(scripts,['scene-kit.js','materials.js','zip.js','app.js','pwa.js']);
+ assert(html.includes('id="mode"'));assert(html.includes('LOCAL TEMPLATES / V.03'));
+ const a=app({browserScripts:true});await a.submit();
+ assert.equal(a.els['#panel'].children.length,6);assert(control(a.els['#panel'].children[0],'シーン1を保存'));
+ assert.equal(JSON.parse(a.store.get('amekaji-v1')).state.mode,'multi');
 });

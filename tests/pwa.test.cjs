@@ -6,7 +6,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const base = 'https://dogzall.github.io/amekaji-studio/';
-function worker({ failInstall = false } = {}) {
+function worker({ failInstall = false, root404 = false } = {}) {
   const handlers = {}, stores = new Map(), requests = [];
   let claims = 0, network = 0;
   const caches = {
@@ -20,6 +20,7 @@ function worker({ failInstall = false } = {}) {
           if (failInstall) throw new Error('asset unavailable');
           for (const request of assets) {
             requests.push(request);
+            if(root404 && request.url === base) throw new Error('404 at directory URL');
             assert(fs.existsSync(path.join(root, new URL(request.url).pathname.replace('/amekaji-studio/', '') || 'index.html')));
             store.set(request.url, new Response('cached:' + request.url));
           }
@@ -52,16 +53,16 @@ test('manifest names, standalone mode, scope and real PNG dimensions', () => {
 });
 test('all shell files, query URLs and both entry documents work offline', async () => {
   const w = worker(); await w.lifecycle('install'); await w.lifecycle('activate');
-  assert.equal(w.requests.length, 12); assert(w.requests.every(r => r.cache === 'reload'));
+  assert.equal(w.requests.length, 11); assert(w.requests.every(r => r.cache === 'reload'));
   for (const r of w.requests) assert((await (await w.fetch(r.url)).text()).startsWith('cached:'));
   assert((await (await w.fetch(base + '?source=home')).text()).startsWith('cached:'));
   assert((await (await w.fetch(base + 'app.js?v=1')).text()).startsWith('cached:'));
   assert.equal(w.network(), 0);
 });
 test('activation removes only this app’s old cache and never touches saved drafts', async () => {
-  const w = worker(); w.stores.set('amekaji-studio-shell-v0', new Map()); w.stores.set('amekaji-studio-shell-v1', new Map()); w.stores.set('amekaji-studio-shell-v2', new Map()); w.stores.set('other-app-v1', new Map());
+  const w = worker(); w.stores.set('amekaji-studio-shell-v0', new Map()); w.stores.set('amekaji-studio-shell-v1', new Map()); w.stores.set('amekaji-studio-shell-v2', new Map()); w.stores.set('amekaji-studio-shell-v3', new Map()); w.stores.set('other-app-v1', new Map());
   await w.lifecycle('install'); await w.lifecycle('activate');
-  assert(!w.stores.has('amekaji-studio-shell-v0')); assert(w.stores.has('other-app-v1')); assert(!w.stores.has('amekaji-studio-shell-v1')); assert(!w.stores.has('amekaji-studio-shell-v2')); assert(w.stores.has('amekaji-studio-shell-v3'));
+  assert(!w.stores.has('amekaji-studio-shell-v0')); assert(w.stores.has('other-app-v1')); assert(!w.stores.has('amekaji-studio-shell-v1')); assert(!w.stores.has('amekaji-studio-shell-v2')); assert(!w.stores.has('amekaji-studio-shell-v3')); assert(w.stores.has('amekaji-studio-shell-v3-root-fix-1'));
   assert.equal(w.claims(), 1); assert(!read('sw.js').includes('localStorage')); assert(!read('sw.js').includes('skipWaiting('));
 });
 test('unrelated routes, origins and non-GET requests are untouched', () => {
@@ -87,4 +88,19 @@ test('existing generator still returns all four materials for 21 combinations', 
     const s = makeState(theme, tone, 'アメカジ初心者');
     assert.equal(s.scenes.length, 6); assert(s.subtitle.includes('00:00:30,000')); assert(s.narration.includes(theme)); assert.equal((s.prompt.match(/【SCENE/g)||[]).length, 6);
   }
+});
+
+test('directory 404 cannot block a new worker from installing the working index.html', async () => {
+  const w=worker({root404:true});
+  w.stores.set('amekaji-studio-shell-v2', new Map([[base,new Response('old-v2')]]));
+  await w.lifecycle('install');
+  assert(!w.requests.some(r=>r.url===base));
+  assert(w.requests.some(r=>r.url===base+'index.html'));
+  await w.lifecycle('activate');
+  assert(!w.stores.has('amekaji-studio-shell-v2'));
+  const index=await (await w.fetch(base+'index.html')).text();
+  assert.equal(await (await w.fetch(base)).text(),index);
+  assert.equal(await (await w.fetch(base+'?check=ver3')).text(),index);
+  assert.equal(await (await w.fetch(base+'index.html?check=ver3')).text(),index);
+  assert.equal(w.network(),0);
 });
