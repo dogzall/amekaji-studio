@@ -9,7 +9,7 @@ const descriptions = {
   prompt:'9:16・全身・服装・背景・構図を指定。画像自体は生成しません。',
   posting:'YouTube Shorts・TikTokのタイトル、投稿文、ハッシュタグ。'
 };
-let active = 'script', state, history = [], activeHistoryId = null, openScene = null;
+let active = 'script', state, history = [], activeHistoryId = null, openScene = null, sceneDraftDirty = false;
 function toast(message) {
   $('#toast').textContent = message; $('#toast').classList.add('show');
   clearTimeout(toast.timer); toast.timer = setTimeout(() => $('#toast').classList.remove('show'), 3600);
@@ -31,7 +31,7 @@ function save() {
   }
 }
 function edited() { if (!save()) toast('端末への保存ができません。ZIPまたはTXTで保存してください。'); }
-function syncForm() { $('#theme').value=state.theme; $('#tone').value=state.tone; $('#audience').value=state.audience; $('#style').value=state.style; $('#mode').value=state.mode; }
+function syncForm() { $('#theme').value=state.theme; $('#tone').value=state.tone; $('#audience').value=state.audience; $('#style').value=state.style; $('#mode').value=state.mode; $('#brand-mode').value=state.brandSettings.mode; brandCheckboxes.forEach(e=>e.checked=state.brandSettings.selected.includes(e.value)); updateBrandPreview(); }
 function currentText() { return Studio.files(state)[filenames[active]]; }
 function download(blob, name) {
   const a=document.createElement('a'), url=URL.createObjectURL(blob);
@@ -55,7 +55,7 @@ function renderHistory() {
     const note=document.createElement('span'); note.textContent=`${Studio.styles[entry.state.style].name} ／ ${new Date(entry.savedAt).toLocaleString('ja-JP')}`;
     b.append(name,note);
     b.addEventListener('click', () => {
-      state=Studio.normalize(JSON.parse(JSON.stringify(entry.state))); activeHistoryId=entry.id; openScene=null;
+      state=Studio.normalize(JSON.parse(JSON.stringify(entry.state))); activeHistoryId=entry.id; openScene=null; sceneDraftDirty=false;
       syncForm(); const saved=save(); render(); $('#status').textContent='履歴から復元';
       toast(saved ? '編集内容を含めて履歴から復元しました' : '復元しました。端末に保存できないためファイルで保存してください。');
       if(innerWidth<681) $('.result').scrollIntoView({behavior:'smooth',block:'start'});
@@ -75,7 +75,7 @@ function sceneEditor(scene,index) {
     const input=document.createElement(multiline?'textarea':'input'); input.value=value; input.maxLength=multiline?500:120;
     if(multiline) input.rows=3; else input.type='text';
     input.setAttribute('aria-label',`シーン${index+1} ${title}`);
-    input.addEventListener('input',()=>{change(input.value); note.textContent='未保存の編集があります。「保存」で反映してください。';});
+    input.addEventListener('input',()=>{change(input.value); sceneDraftDirty=true; note.textContent='未保存の編集があります。「保存」で反映してください。';});
     label.append(input); parent.append(label); controls.push(input);
   }
   for(const [group,keys] of Object.entries(Studio.sceneFields)) {
@@ -89,16 +89,18 @@ function sceneEditor(scene,index) {
   const buttons=document.createElement('div'); buttons.className='scene-actions';
   const saveButton=document.createElement('button'); saveButton.type='button'; saveButton.className='outline'; saveButton.textContent='保存'; saveButton.setAttribute('aria-label',`シーン${index+1}を保存`);
   saveButton.addEventListener('click',()=>{
-    draft.text=state.scenes[index].text;
+    draft.text=state.scenes[index].text; sceneDraftDirty=false;
     state=Studio.saveScene(state,index,draft); openScene=index;
     const saved=save(); render(); toast(saved?'シーン設定を保存し、出力と履歴に反映しました':'設定を反映しました。端末に保存できないためZIPで保存してください。');
   });
   const reset=document.createElement('button'); reset.type='button'; reset.className='outline'; reset.textContent='元に戻す'; reset.setAttribute('aria-label',`シーン${index+1}を初期提案に戻す`);
-  reset.addEventListener('click',()=>{state=Studio.resetScene(state,index);openScene=index;const saved=save();render();toast(saved?'このシーンを初期提案に戻しました':'初期提案に戻しました。端末に保存できないためファイルで保存してください。');});
+  reset.addEventListener('click',()=>{sceneDraftDirty=false;state=Studio.resetScene(state,index);openScene=index;const saved=save();render();toast(saved?'このシーンを初期提案に戻しました':'初期提案に戻しました。端末に保存できないためファイルで保存してください。');});
   buttons.append(saveButton,reset); editor.append(buttons); details.append(summary,description,note,editor); return details;
 }
 function render() {
   $('#concept').textContent=state.theme;
+  const used=[...new Set(state.scenes.flatMap(s=>['outer','top','pants','shoes'].map(k=>s[k].brand)).filter(Boolean))];
+  $('#generated-brands').textContent=`表示中の素材：${state.brandSettings.mode==='selected'?'ブランド指定':'おまかせ'} ／ 使用ブランド：${used.join('・')||'ブランド未指定'}。設定変更は再生成まで反映されません。`;
   $('#tone-label').textContent=Studio.styles[state.style].name;
   $('#outfit').value=state.outfit;
   $('#panel-description').textContent=descriptions[active];
@@ -126,15 +128,21 @@ function render() {
 $('#form').addEventListener('submit', event => {
   event.preventDefault(); const theme=$('#theme').value.trim();
   if(!theme) { $('#theme').setCustomValidity('テーマを入力してください'); $('#theme').reportValidity(); return; }
-  state=Studio.makeState(theme,$('#tone').value,$('#audience').value,$('#style').value,$('#mode').value);
+  const analysis=Studio.analyzeBrands(theme,formBrandSettings(),$('#style').value);
+  if(analysis.error){$('#brand-notice').textContent=analysis.error;toast(analysis.error);return;}
+  if(sceneDraftDirty && !window.confirm('未保存のシーン設定があります。再生成すると失われます。先に保存する場合はキャンセルしてください。再生成しますか？'))return;
+  try{state=Studio.makeState(theme,$('#tone').value,$('#audience').value,$('#style').value,$('#mode').value,formBrandSettings());}
+  catch(error){$('#brand-notice').textContent=error.message;toast(error.message);return;}
+  sceneDraftDirty=false;openScene=null;
+  updateBrandPreview();
   history=Studio.addHistory(history,state); activeHistoryId=history[0].id;
   const saved=save(); active='script'; render(); $('#status').textContent='作成済み';
   toast(saved ? '5種類の素材をテンプレートで作成し、履歴に保存しました' : '素材を作成しました。端末に保存できないためZIPで保存してください。');
   if(innerWidth<681) $('.result').scrollIntoView({behavior:'smooth',block:'start'});
 });
-$('#theme').addEventListener('input', () => $('#theme').setCustomValidity(''));
+$('#theme').addEventListener('input', () => {$('#theme').setCustomValidity('');updateBrandPreview();});
 $('#outfit').addEventListener('input', () => { state.outfit=$('#outfit').value; edited(); });
-document.querySelectorAll('[data-example]').forEach(b => b.addEventListener('click', () => { $('#theme').value=b.dataset.example; $('#theme').setCustomValidity(''); $('#theme').focus(); }));
+document.querySelectorAll('[data-example]').forEach(b => b.addEventListener('click', () => { $('#theme').value=b.dataset.example; $('#theme').setCustomValidity(''); $('#theme').focus();updateBrandPreview(); }));
 document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { active=b.dataset.tab; render(); }));
 $('#copy-tab').addEventListener('click', () => copy(currentText()));
 $('#all-copy').addEventListener('click', () => copy(Studio.allText(state)));
@@ -143,10 +151,33 @@ $('#zip-download').addEventListener('click', () => {
   try { download(StudioZip.zip(Studio.files(state)), 'amekaji-materials.zip'); }
   catch { toast('ZIPを作成できませんでした。各素材をTXT/SRTで保存してください。'); }
 });
+const brandCheckboxes=[];
+function formBrandSettings(){return {mode:$('#brand-mode').value==='selected'?'selected':'auto',selected:brandCheckboxes.filter(e=>e.checked).map(e=>e.value)};}
+function updateBrandPreview(){
+  const config=formBrandSettings();
+  $('#brand-selector').hidden=config.mode!=='selected';
+  const names=config.selected.map(id=>Studio.brandCatalogue.find(b=>b.id===id).name);
+  $('#brand-selection-status').textContent=config.mode==='selected'?`指定中 ${names.length}件：${names.join('・')||'未選択'} ／ 次の生成に適用`:'おまかせ：テーマに指定がなければ、スタイルに合う登録ブランドを分散して提案します。';
+  const analysis=Studio.analyzeBrands($('#theme').value,config,$('#style').value);
+  $('#brand-notice').textContent=[analysis.error,...analysis.warnings].filter(Boolean).join(' ');
+}
+for(const [group,title] of Object.entries(Studio.brandGroups)){
+  const fieldset=document.createElement('fieldset'),legend=document.createElement('legend');legend.textContent=title;fieldset.append(legend);
+  for(const brand of Studio.brandCatalogue.filter(b=>b.group===group)){
+    const label=document.createElement('label'),checkbox=document.createElement('input'),text=document.createElement('span');
+    checkbox.type='checkbox';checkbox.value=brand.id;checkbox.checked=false;checkbox.setAttribute('aria-label',`ブランド ${brand.name}`);text.textContent=brand.name;
+    checkbox.addEventListener('change',updateBrandPreview);label.append(checkbox,text);fieldset.append(label);brandCheckboxes.push(checkbox);
+  }
+  $('#brand-options').append(fieldset);
+}
+$('#brand-mode').addEventListener('change',updateBrandPreview);
+$('#style').addEventListener('change',updateBrandPreview);
+$('#clear-brands').addEventListener('click',()=>{brandCheckboxes.forEach(e=>e.checked=false);updateBrandPreview();});
+updateBrandPreview();
 const storedHistory=readStorage('amekaji-history-v2');
 if(Array.isArray(storedHistory)) history=storedHistory.filter(e => e && typeof e.id==='string' && !isNaN(Date.parse(e.savedAt)) && Studio.normalize(e.state)).slice(0,10).map(e => ({...e,state:Studio.normalize(e.state)}));
 const previous=readStorage('amekaji-v1');
 state=Studio.normalize(previous?.state);
 if(state) { activeHistoryId=typeof previous.activeHistoryId==='string' ? previous.activeHistoryId : null; $('#status').textContent='保存済み'; syncForm(); }
-else state=Studio.makeState($('#theme').value,$('#tone').value,$('#audience').value,$('#style').value,$('#mode').value);
+else state=Studio.makeState($('#theme').value,$('#tone').value,$('#audience').value,$('#style').value,$('#mode').value,formBrandSettings());
 render();

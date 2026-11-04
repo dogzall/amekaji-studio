@@ -1,11 +1,11 @@
 /* Bump VERSION whenever an app-shell file changes. A new worker waits until
  * all old app windows close, so an editing session is never forcibly reloaded. */
-const VERSION = 'v3-root-fix-1';
+const VERSION = 'v3.1-brands-1';
 const CACHE_PREFIX = 'amekaji-studio-shell-';
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 const BASE = new URL('./', self.location.href);
 const SHELL = [
-  'index.html', 'style.css', 'app.js', 'pwa.js', 'materials.js', 'zip.js', 'scene-kit.js',
+  'index.html', 'style.css', 'app.js', 'pwa.js', 'materials.js', 'zip.js', 'scene-kit.js', 'brand-data.js', 'brand-rules.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
   'icons/icon-maskable-512.png'
 ].map(path => new URL(path, BASE).href);

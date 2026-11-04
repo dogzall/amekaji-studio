@@ -53,16 +53,16 @@ test('manifest names, standalone mode, scope and real PNG dimensions', () => {
 });
 test('all shell files, query URLs and both entry documents work offline', async () => {
   const w = worker(); await w.lifecycle('install'); await w.lifecycle('activate');
-  assert.equal(w.requests.length, 11); assert(w.requests.every(r => r.cache === 'reload'));
+  assert.equal(w.requests.length, 13); assert(w.requests.every(r => r.cache === 'reload'));
   for (const r of w.requests) assert((await (await w.fetch(r.url)).text()).startsWith('cached:'));
   assert((await (await w.fetch(base + '?source=home')).text()).startsWith('cached:'));
   assert((await (await w.fetch(base + 'app.js?v=1')).text()).startsWith('cached:'));
   assert.equal(w.network(), 0);
 });
 test('activation removes only this app’s old cache and never touches saved drafts', async () => {
-  const w = worker(); w.stores.set('amekaji-studio-shell-v0', new Map()); w.stores.set('amekaji-studio-shell-v1', new Map()); w.stores.set('amekaji-studio-shell-v2', new Map()); w.stores.set('amekaji-studio-shell-v3', new Map()); w.stores.set('other-app-v1', new Map());
+  const w = worker(); w.stores.set('amekaji-studio-shell-v0', new Map()); w.stores.set('amekaji-studio-shell-v1', new Map()); w.stores.set('amekaji-studio-shell-v2', new Map()); w.stores.set('amekaji-studio-shell-v3', new Map()); w.stores.set('amekaji-studio-shell-v3-root-fix-1', new Map()); w.stores.set('other-app-v1', new Map());
   await w.lifecycle('install'); await w.lifecycle('activate');
-  assert(!w.stores.has('amekaji-studio-shell-v0')); assert(w.stores.has('other-app-v1')); assert(!w.stores.has('amekaji-studio-shell-v1')); assert(!w.stores.has('amekaji-studio-shell-v2')); assert(!w.stores.has('amekaji-studio-shell-v3')); assert(w.stores.has('amekaji-studio-shell-v3-root-fix-1'));
+  assert(!w.stores.has('amekaji-studio-shell-v0')); assert(w.stores.has('other-app-v1')); assert(!w.stores.has('amekaji-studio-shell-v1')); assert(!w.stores.has('amekaji-studio-shell-v2')); assert(!w.stores.has('amekaji-studio-shell-v3')); assert(!w.stores.has('amekaji-studio-shell-v3-root-fix-1')); assert(w.stores.has('amekaji-studio-shell-v3.1-brands-1'));
   assert.equal(w.claims(), 1); assert(!read('sw.js').includes('localStorage')); assert(!read('sw.js').includes('skipWaiting('));
 });
 test('unrelated routes, origins and non-GET requests are untouched', () => {

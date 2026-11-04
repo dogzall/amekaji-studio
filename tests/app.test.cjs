@@ -18,18 +18,18 @@ class Element {
   setCustomValidity(value) { this.validity=value; }
   reportValidity() {} focus() {} select() {} remove() {} scrollIntoView() {}
 }
-function app({store=new Map(),deny=false,browserScripts=false}={}) {
+function app({store=new Map(),deny=false,browserScripts=false,confirmDecision=true}={}) {
   const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8'), els={};
   for(const id of html.matchAll(/id="([^"]+)"/g)) els['#'+id[1]]=new Element();
   els['.result']=new Element();
   els['#theme'].value='白Tとデニム'; els['#tone'].value='guide'; els['#audience'].value='アメカジ初心者'; els['#style'].value='classic';
   const tabs=[...html.matchAll(/data-tab="([^"]+)"/g)].map(m=>{const e=new Element();e.dataset.tab=m[1];return e;});
   const examples=[...html.matchAll(/data-example="([^"]+)"/g)].map(m=>{const e=new Element();e.dataset.example=m[1];return e;});
-  const downloads=[],copied=[],localStorage={getItem:k=>{if(deny)throw Error('blocked');return store.get(k)||null;},setItem:(k,v)=>{if(deny)throw Error('quota');store.set(k,v);}};
-  const context=vm.createContext({Studio,StudioZip,document:{querySelector:s=>{assert(els[s],`Missing selector ${s}`);return els[s];},querySelectorAll:s=>s==='[data-tab]'?tabs:examples,createElement:()=>new Element(),body:new Element(),execCommand:()=>true},localStorage,innerWidth:393,navigator:{clipboard:{writeText:async text=>copied.push(text)}},Blob,URL:{createObjectURL:b=>{downloads.push(b);return 'blob:fake';},revokeObjectURL(){}},setTimeout:()=>0,clearTimeout(){},console});
-  if(browserScripts) { delete context.Studio; delete context.StudioZip; for(const name of ['scene-kit.js','materials.js','zip.js']) vm.runInContext(fs.readFileSync(path.join(__dirname,'..',name),'utf8'),context); }
+  const downloads=[],copied=[],confirmations=[],localStorage={getItem:k=>{if(deny)throw Error('blocked');return store.get(k)||null;},setItem:(k,v)=>{if(deny)throw Error('quota');store.set(k,v);}};
+  const context=vm.createContext({Studio,StudioZip,window:{confirm:message=>{confirmations.push(message);return confirmDecision;}},document:{querySelector:s=>{assert(els[s],`Missing selector ${s}`);return els[s];},querySelectorAll:s=>s==='[data-tab]'?tabs:examples,createElement:()=>new Element(),body:new Element(),execCommand:()=>true},localStorage,innerWidth:393,navigator:{clipboard:{writeText:async text=>copied.push(text)}},Blob,TextEncoder,URL:{createObjectURL:b=>{downloads.push(b);return 'blob:fake';},revokeObjectURL(){}},setTimeout:()=>0,clearTimeout(){},console});
+  if(browserScripts) { delete context.Studio; delete context.StudioZip; for(const name of ['brand-data.js','brand-rules.js','scene-kit.js','materials.js','zip.js']) vm.runInContext(fs.readFileSync(path.join(__dirname,'..',name),'utf8'),context); }
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../app.js'),'utf8'),context);
-  return {els,tabs,store,downloads,copied,context,submit:()=>els['#form'].emit('submit'),tab:async name=>tabs.find(t=>t.dataset.tab===name).click()};
+  return {els,tabs,store,downloads,copied,confirmations,context,submit:()=>els['#form'].emit('submit'),tab:async name=>tabs.find(t=>t.dataset.tab===name).click()};
 }
 test('generate, switch all five tabs and copy the selected material',async()=>{
   const a=app(); a.els['#theme'].value='ChampionとDickies';a.els['#style'].value='hiphop'; await a.submit();
@@ -104,9 +104,48 @@ test('Ver.3 scene panels use native collapsed details and accessible text contro
 test('real browser script order initializes Ver.3 globals and six editing panels',async()=>{
  const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
  const scripts=[...html.matchAll(/<script src="([^"]+)"/g)].map(m=>m[1]);
- assert.deepEqual(scripts,['scene-kit.js','materials.js','zip.js','app.js','pwa.js']);
+ assert.deepEqual(scripts,['brand-data.js','brand-rules.js','scene-kit.js','materials.js','zip.js','app.js','pwa.js']);
  assert(html.includes('id="mode"'));assert(html.includes('LOCAL TEMPLATES / V.03'));
  const a=app({browserScripts:true});await a.submit();
  assert.equal(a.els['#panel'].children.length,6);assert(control(a.els['#panel'].children[0],'シーン1を保存'));
  assert.equal(JSON.parse(a.store.get('amekaji-v1')).state.mode,'multi');
+});
+async function choose(a,ids){
+ a.els['#brand-mode'].value='selected';await a.els['#brand-mode'].emit('change');
+ for(const id of ids){const brand=Studio.brandCatalogue.find(b=>b.id===id),check=control(a.els['#brand-options'],`ブランド ${brand.name}`);check.checked=true;await check.emit('change');}
+}
+test('brand UI blocks empty selection, then generates a single allowed brand',async()=>{
+ const a=app();const before=a.els['#concept'].textContent;await choose(a,[]);await a.submit();
+ assert.equal(a.els['#concept'].textContent,before);assert(a.els['#brand-notice'].textContent.includes('選択'));assert.equal(a.store.size,0);
+ await choose(a,['champion']);await a.submit();const s=JSON.parse(a.store.get('amekaji-v1')).state;assert.deepEqual(s.brandSettings,{mode:'selected',selected:['champion']});
+ assert(s.scenes.every(x=>x.top.brand==='Champion'));assert(a.els['#brand-selection-status'].textContent.includes('Champion'));assert.equal(a.els['#brand-selector'].hidden,false);
+});
+test('multiple checkboxes, pending mode changes and clear selection never overwrite generated scenes',async()=>{
+ const a=app();a.els['#theme'].value='ChampionのスウェットとDickies 874';await choose(a,['champion','dickies']);await a.submit();
+ const before=a.store.get('amekaji-v1'),title=a.els['#generated-brands'].textContent;
+ a.els['#brand-mode'].value='auto';await a.els['#brand-mode'].emit('change');assert.equal(a.els['#brand-selector'].hidden,true);assert.equal(a.store.get('amekaji-v1'),before);assert.equal(a.els['#generated-brands'].textContent,title);
+ a.els['#brand-mode'].value='selected';await a.els['#brand-mode'].emit('change');await a.els['#clear-brands'].click();
+ assert(a.els['#brand-selection-status'].textContent.includes('未選択'));assert.equal(a.store.get('amekaji-v1'),before);await a.submit();assert.equal(a.store.get('amekaji-v1'),before);
+});
+test('theme/UI contradiction is shown before generation and output follows selection',async()=>{
+ const a=app();a.els['#theme'].value='Carharttのダックジャケット';await choose(a,['lee']);assert(a.els['#brand-notice'].textContent.includes('Carhartt'));assert(a.els['#brand-notice'].textContent.includes('選択外'));
+ await a.submit();const s=JSON.parse(a.store.get('amekaji-v1')).state;assert(!s.prompt.includes('Carhartt'));assert(s.prompt.includes('Lee'));
+});
+test('regeneration asks before discarding an unsaved scene edit and cancellation preserves data',async()=>{
+ const a=app({confirmDecision:false});await a.submit();const before=a.store.get('amekaji-v1'),card=a.els['#panel'].children[0];
+ const input=control(card,'シーン1 髪型');input.value='未保存の髪型';await input.emit('input');
+ await choose(a,['gap']);await a.submit();assert.equal(a.confirmations.length,1);assert(a.confirmations[0].includes('未保存'));assert.equal(a.store.get('amekaji-v1'),before);assert.equal(control(a.els['#panel'].children[0],'シーン1 髪型').value,'未保存の髪型');
+});
+test('saved brand settings and manual out-of-selection edits are restored from history',async()=>{
+ const a=app();await choose(a,['champion','dickies']);await a.submit();
+ const card=a.els['#panel'].children[0],brand=control(card,'シーン1 ブランド');brand.value='手動の別ブランド';await brand.emit('input');await control(card,'シーン1を保存').click();
+ a.els['#brand-mode'].value='auto';await a.els['#brand-mode'].emit('change');a.els['#theme'].value='別のテーマ';await a.submit();
+ const b=app({store:a.store});await b.els['#history-list'].children[1].click();assert.equal(b.els['#brand-mode'].value,'selected');
+ assert(control(b.els['#brand-options'],'ブランド Champion').checked);assert(control(b.els['#brand-options'],'ブランド Dickies').checked);
+ const saved=JSON.parse(b.store.get('amekaji-v1')).state;assert.equal(saved.scenes[0].outer.brand,'手動の別ブランド');await b.tab('prompt');await b.els['#copy-tab'].click();assert(b.copied.at(-1).includes('手動の別ブランド'));
+});
+test('brand UI works with blocked storage and all checkboxes belong to one of three labelled groups',async()=>{
+ const a=app({deny:true,browserScripts:true});const groups=a.els['#brand-options'].children;assert.equal(groups.length,3);
+ assert.equal(groups.flatMap(g=>g.children.slice(1)).length,16);
+ await choose(a,['hanes']);await a.submit();assert(a.els['#storage-note'].textContent.includes('保存できません'));await a.els['#zip-download'].click();assert.equal(a.downloads.at(-1).type,'application/zip');
 });
